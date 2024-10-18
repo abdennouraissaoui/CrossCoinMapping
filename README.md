@@ -44,6 +44,10 @@ source .venv/bin/activate
 ```angular2html
 pip install -r requirements.txt
 ```
+4. Running jupyter lab
+```angular2html
+jupyter lab
+```
 ## Running the Project
 # Step 1: Prepare Your Data
 Place your Datasets folder in App/.
