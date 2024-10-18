@@ -37,7 +37,7 @@ cd CrossCoinMapping
 ```
 2. Create and activate a virtual environment:
 ```angular2html
-python3 -m venv .venv
+python3.10 -m venv .venv
 source .venv/bin/activate
 ```
 3. Install the required dependencies:
@@ -52,7 +52,7 @@ jupyter lab
 # Step 1: Prepare Your Data
 Place your Datasets folder in App/.
 ## Step 2: Run the Similarity Calculation
-To compute the similarity metrics for token pairs
+To compute the similarity metrics, open the Jupyter notebooks located in the `APP/` folder. You can do this by running:
 1.  Cross
 ## Step 3: View the Results
 After the script completes, visualizations for token pairs that meet the similarity threshold will be saved in the visualizations/ folder. The similarity metrics will also be saved in a CSV file .
