@@ -40,12 +40,7 @@ cd CrossCoinMapping
 python3 -m venv .venv
 source .venv/bin/activate
 ```
-3. Create and activate a virtual environment:
-```angular2html
-python3 -m venv .venv
-source .venv/bin/activate
-```
-4. Install the required dependencies:
+3. Install the required dependencies:
 ```angular2html
 pip install -r requirements.txt
 ```
