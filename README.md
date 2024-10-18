@@ -29,7 +29,7 @@ CrossCoinMapping
 └── README.md                     # Project documentation
 
 # setup
-Ensure that you have the following installed on your system:
+Ensure that you have the following installed on your system and **python version should 3.10**
 1. Clone the repository:
 ```angular2html
 git clone https://github.com/iffishells/CrossCoinMapping.git
@@ -46,9 +46,9 @@ pip install -r requirements.txt
 ```
 ## Running the Project
 # Step 1: Prepare Your Data
-Place your token price data in the data/ folder. Ensure the data is formatted in a pivot table structure where each token has its own column, and rows represent timestamps.
+Place your Datasets folder in App/.
 ## Step 2: Run the Similarity Calculation
-To compute the similarity metrics for token pairs, run the main script from the src/ folder
-
+To compute the similarity metrics for token pairs
+1.  Cross
 ## Step 3: View the Results
-After the script completes, visualizations for token pairs that meet the similarity threshold will be saved in the visualizations/ folder. The similarity metrics will also be saved in a CSV file specified in the files_path argument.
+After the script completes, visualizations for token pairs that meet the similarity threshold will be saved in the visualizations/ folder. The similarity metrics will also be saved in a CSV file .
