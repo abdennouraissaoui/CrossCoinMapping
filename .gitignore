@@ -7,3 +7,5 @@ app/Datasets
 main.ipynb
 CrossMapping-backup.ipynb
 validation_of_token.ipynb
+*.xml
+*.iml
