@@ -35,10 +35,15 @@ Ensure that you have the following installed on your system and **python version
 git clone https://github.com/iffishells/CrossCoinMapping.git
 cd CrossCoinMapping
 ```
-2. Create and activate a virtual environment:
+2. Create and activate a virtual environment(Ubuntu User):
 ```angular2html
 python3.10 -m venv .venv
 source .venv/bin/activate
+```
+3.  Create and activate a virtual environment(window User):
+```angular2html
+python3.10 -m venv .venv
+.venv\Scripts\activate
 ```
 3. Install the required dependencies:
 ```angular2html
