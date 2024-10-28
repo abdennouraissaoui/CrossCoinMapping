@@ -12,3 +12,4 @@ validation_of_token.ipynb
 *.iml
 *.ipynb_checkpoints
 ExperimentalFiles
+*.idea
