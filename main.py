@@ -1,27 +1,14 @@
-from App.utils.helper_clustering_functions import KMeanClustering ,kmeans_with_smape_ts ,kmeans_with_min_distance
 from App.utils.helper_similarity_metrics import calculate_dtw_distance , calculate_error_metrics ,calculate_cosine_similarity_char ,CoinCrossMappingSimilarity ,smape,smape_distance_metric
 from App.utils.helper_visualization_functions import plot_and_save , cluster_visualization_of_time_series
-import pandas as pd
-import numpy as np
-import os
-import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.cluster import DBSCAN
 from sklearn.metrics import pairwise_distances
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import DBSCAN
 import csv
-import os
 import glob
 import tqdm
 import gc
-import logging
-from dotenv import load_dotenv
 from dotenv import dotenv_values
-# from openai import AzureOpenAI
-import ast
-import matplotlib.pyplot as plt
-from wordcloud import WordCloud
 import logging
 import os
 import pandas as pd
@@ -31,11 +18,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from App.utils.helper_visualization_functions import generate_wordclouds_for_clusters
-config = dotenv_values(os.path.join('..','.env'))  # config = {"USER": "foo", "EMAIL": "foo@example.org"}
-
-
+config = dotenv_values(os.path.join('.env'))
 import requests
-import json
 # Configure logging
 
 logging.basicConfig(
@@ -325,8 +309,8 @@ class CrossMapping:
         return df
 
     def __call__(self):
-
-        TokenNameBaseClustring = True
+        testing_on_testing_ids = True
+        TokenNameBaseClustring = False
 
         logger.info('Reading Price data')
         raw_price_df = self.read_price_data(self.files_path['raw_price_data'])
@@ -334,10 +318,12 @@ class CrossMapping:
         logger.info('Filtering Price Data')
         filtered_raw_price_df = self.filter_price_data(price_data=raw_price_df, price_points_threshold=100)
 
-        # testing_ids = list(filtered_raw_price_df['base_currency'].unique())[0:1000]
-        testing_ids = [1166,15390,1146,15467,2012,15593,13049,16668,162796,168956]
+        if testing_on_testing_ids:
 
-        filtered_raw_price_df = filtered_raw_price_df[filtered_raw_price_df['base_currency'].isin(testing_ids)]
+            # testing_ids = list(filtered_raw_price_df['base_currency'].unique())[0:1000]
+            testing_ids = [1166,15390,1146,15467,2012,15593,13049,16668,162796,168956]
+
+            filtered_raw_price_df = filtered_raw_price_df[filtered_raw_price_df['base_currency'].isin(testing_ids)]
 
         logger.info('Reading Token Data')
         token_names_df = pd.read_csv(self.files_path['raw_token_names'])
@@ -407,8 +393,6 @@ class CrossMapping:
 
         else:
 
-
-
             logger.info('Merging price data and token data')
             merged_df = filtered_raw_price_df.merge(token_names_df, left_on=['base_currency'], right_on=['id'])
 
@@ -453,8 +437,8 @@ class CrossMapping:
             results_with_cluster_id = results_with_cluster_id.sort_values(by='timestamp_utc')
 
             # Visualization (if needed)
-            # cluster_visualization_of_time_series(results_with_cluster_id=results_with_cluster_id,
-            #                                      cluster_dir_path=self.directory_names['cluster_dir_path'])
+            cluster_visualization_of_time_series(results_with_cluster_id=results_with_cluster_id,
+                                                 cluster_dir_path=self.directory_names['cluster_dir_path'])
 
             # Create pivot table from results with cluster IDs
             price_pivot_df = results_with_cluster_id.pivot_table(index='timestamp_utc', columns='base_currency',
