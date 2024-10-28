@@ -36,13 +36,19 @@ def calculate_cosine_similarity_char(str1, str2, ngram_range=(2, 3)):
     # print(f"difference between : {str1} and {str2} is : {cosine_sim[0][0]}")
     return cosine_sim[0][0]
 
-def CoinCrossMappingSimilarity(results_with_cluster_id=None, price_pivot_df=None,files_path = None,directory_names=None):
+import os
+import csv
+import gc
+from tqdm import tqdm
+import glob
+
+def CoinCrossMappingSimilarity(results_with_cluster_id=None, price_pivot_df=None, files_path=None, directory_names=None):
     results_file = files_path['similarity_results_file_path']
 
     if not os.path.exists(results_file):
         with open(results_file, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(['Token1', 'Token2', 'DTW_Distance', 'MAE', 'RMSE', 'MAPE', 'SMAPE',"cosine_sim"])
+            writer.writerow(['Token1', 'Token2', 'DTW_Distance', 'MAE', 'RMSE', 'MAPE', 'SMAPE', "cosine_sim"])
 
     # Iterate through each cluster
     for cluster_id, cluster_group in results_with_cluster_id.groupby('cluster'):
@@ -52,11 +58,14 @@ def CoinCrossMappingSimilarity(results_with_cluster_id=None, price_pivot_df=None
 
         # Loop through each pair of tokens (avoid redundant pairs with i < j)
         for i, token1 in tqdm(enumerate(tokens), total=len(tokens), desc=f'Cluster {cluster_id}'):
+            token1 = str(token1)
             for j, token2 in enumerate(tokens):
+                token2 = str(token2)
                 if i >= j:  # Skip redundant calculations
                     continue
 
                 try:
+                    # Make sure to convert paths and token IDs to strings
                     token_folder_name = os.path.join(directory_names['visualization_data_dir_name'], token1)
                     os.makedirs(token_folder_name, exist_ok=True)
 
@@ -65,7 +74,6 @@ def CoinCrossMappingSimilarity(results_with_cluster_id=None, price_pivot_df=None
 
                     # Check if the plot already exists
                     if os.path.exists(saving_file_path):
-                        # print(f"{saving_file_path} already exists, skipping...")
                         continue
 
                     print(f"Token1: {token1} and Token2: {token2}")
@@ -94,9 +102,8 @@ def CoinCrossMappingSimilarity(results_with_cluster_id=None, price_pivot_df=None
                             "cosine_sim": cosine_sim
                         }
 
-
                         # Save plot only if SMAPE is above 15
-                        if smape <15:
+                        if smape < 15:
                             plot_and_save(ts1=ts1_common, 
                                           ts2=ts2_common, 
                                           token1=token1, 
@@ -105,22 +112,25 @@ def CoinCrossMappingSimilarity(results_with_cluster_id=None, price_pivot_df=None
                                           saving_file_path=saving_file_path)
 
                         # Save the results in a CSV file
-                            print(f"SMAPE: {smape}")
+                        print(f"SMAPE: {smape}")
 
-                            with open(results_file, mode='a', newline='') as file:
-                                writer = csv.writer(file)
-                                writer.writerow([token1, token2, dtw_distance, mae, rmse, mape, smape, cosine_sim])
+                        with open(results_file, mode='a', newline='') as file:
+                            writer = csv.writer(file)
+                            writer.writerow([token1, token2, dtw_distance, mae, rmse, mape, smape, cosine_sim])
 
-                            # Free memory if necessary
+                        # Free memory if necessary
                         del ts1_common, ts2_common
                         gc.collect()
 
                 except Exception as e:
                     print(f"Error processing tokens {token1} and {token2}: {e}")
-                    continue                
+                    raise e
+                    continue
+
     gc.collect()
     total_detected_similar_tokens = len(glob.glob(f"{directory_names['visualization_data_dir_name']}/*/*.png"))
     return total_detected_similar_tokens
+
 def smape(y_true, y_pred):
     """Calculate SMAPE between two time series."""
     return 100 * np.mean(2 * np.abs(y_true - y_pred) / (np.abs(y_true) + np.abs(y_pred) + 1e-8))
