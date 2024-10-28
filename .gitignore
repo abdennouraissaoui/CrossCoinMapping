@@ -10,10 +10,8 @@ CrossMapping-backup.ipynb
 validation_of_token.ipynb
 *.xml
 *.iml
-*.ipynb_checkpoints
 ExperimentalFiles
 *.idea
-.ipynb_checkpoints
-**/*/.ipynb_checkpoints
+.ipynb_checkpoints/
 # Ignore Python cache files
 __pycache__/
