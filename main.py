@@ -30,7 +30,7 @@ from tqdm import tqdm
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import ProcessPoolExecutor, as_completed
-
+from App.utils.helper_visualization_functions import generate_wordclouds_for_clusters
 config = dotenv_values(os.path.join('..','.env'))  # config = {"USER": "foo", "EMAIL": "foo@example.org"}
 
 
@@ -255,7 +255,7 @@ class CrossMapping:
             print(f"Error processing tokens {token1} and {token2}: {e}")
             raise e
     def CoinCrossMappingSimilarity_multiprocessing(self,results_with_cluster_id=None, price_pivot_df=None, files_path=None,
-                                                   directory_names=None, max_workers=2):
+                                                   directory_names=None, max_workers=2,skip_noise_cluster=True):
         results_file = files_path['similarity_results_file_path']
 
         if not os.path.exists(results_file):
@@ -265,6 +265,9 @@ class CrossMapping:
 
         # Iterate through each cluster
         for cluster_id, cluster_group in results_with_cluster_id.groupby('cluster'):
+            if skip_noise_cluster==True:
+                if cluster_id==-1:
+                    continue
             print(f"Processing Cluster ID: {cluster_id}")
             tokens = list(cluster_group['base_currency'].unique())
             logger.info(f'Tokens in this cluster : {tokens}')
@@ -287,10 +290,15 @@ class CrossMapping:
             del cluster_group
             del tokens            
             gc.collect()
-        total_detected_similar_tokens = len(glob.glob(f"{directory_names['visualization_data_dir_name']}/*/*.png"))
+        total_detected_similar_tokens = len(glob.glob(f"{directory_names['visualization_data_dir_name']}/*.png"))
         return total_detected_similar_tokens
 
-    def ClustringBaseOnTokenName(self,df =None,max_features=1000,min_df=1,max_df=0.9,cluster_col_name='TokenNameBaseClusterLabel'):
+    def ClustringBaseOnTokenName(self,df =None,
+                                 max_features=1000,
+                                 min_df=1,
+                                 max_df=0.9,
+                                 cluster_col_name='TokenNameBaseClusterLabel',
+                                 save_plots=False):
 
         df.dropna(subset=['display_name'], inplace=True)  # Drop rows with NaN in 'display_name'
         df['display_name'] = df['display_name'].str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.lower()
@@ -306,6 +314,14 @@ class CrossMapping:
 
         # Assign cluster labels back to the DataFrame
         df[f'{cluster_col_name}'] = labels
+        if save_plots==True:
+
+            try:
+
+                generate_wordclouds_for_clusters(token_names_df=df, directory_names=self.directory_names,
+                                         cluster_label_name=f'{cluster_col_name}')
+            except:
+                pass
         return df
 
     def __call__(self):
@@ -318,26 +334,34 @@ class CrossMapping:
         logger.info('Filtering Price Data')
         filtered_raw_price_df = self.filter_price_data(price_data=raw_price_df, price_points_threshold=100)
 
+        # testing_ids = list(filtered_raw_price_df['base_currency'].unique())[0:1000]
+        testing_ids = [1166,15390,1146,15467,2012,15593,13049,16668,162796,168956]
+
+        filtered_raw_price_df = filtered_raw_price_df[filtered_raw_price_df['base_currency'].isin(testing_ids)]
+
         logger.info('Reading Token Data')
         token_names_df = pd.read_csv(self.files_path['raw_token_names'])
 
         logger.info('Filtering Token Data')
         token_names_df = self.filter_token_names(price_data=filtered_raw_price_df, token_data=token_names_df)
 
-        # number_token_names = len(token_names_df['id'].unique())
-        token_names_df.to_csv('filtered_token_names_df.csv')
 
         if TokenNameBaseClustring == True:
-            
-            token_names_df = self.ClustringBaseOnTokenName(df=token_names_df,cluster_col_name='TokenNameBaseClusterLabel')
 
+            logger.info('Token Name Base Clustring Started ...')
+            token_names_df = self.ClustringBaseOnTokenName(df=token_names_df,cluster_col_name='TokenNameBaseClusterLabel',save_plots=False)
+            total_cluster_base_on_token_name = len(list(token_names_df['TokenNameBaseClusterLabel'].unique()))
+            logger.info(f"Total Number of cluster base on token name : {total_cluster_base_on_token_name}") 
             for cluster_id, cluster_group in token_names_df.groupby('TokenNameBaseClusterLabel'):
+                if cluster_id==-1:
+                    continue
+                logger.info(f"Processing Cluster ID of TokenNameBase: {cluster_id}")
+                # print(list(cluster_group))
+                tokens = list(cluster_group['id'].unique())
+                # logger.info(f'Tokens in this cluster : {tokens}')
+                logger.info(f"Number of tokens in this cluster: {len(tokens)}")
 
-                print(f"Processing Cluster ID: {cluster_id}")
-                tokens = list(cluster_group['base_currency'].unique())
-                logger.info(f'Tokens in this cluster : {tokens}')
-                print(f"Number of tokens in this cluster: {len(tokens)}")
-
+                logger.info('Merging Token Name Data to price data after Clustering')
                 merged_df = filtered_raw_price_df.merge(cluster_group, left_on=['base_currency'], right_on=['id'])
 
                 logger.info(f'Pivoting the data')
@@ -379,20 +403,11 @@ class CrossMapping:
                     results_with_cluster_id, price_pivot_df, self.files_path, self.directory_names, max_workers=2
                 )
                 logger.info(f"Total similar tokens: {total_similar_tokens}")
-
-
-                del raw_price_df
-                del filtered_raw_price_df
-                del token_names_df
-                del price_pivot
                 gc.collect()
 
         else:
 
 
-            # print(f"Number of token : {number_token_names}")
-            # print('token_names_df : {}.'.format(token_names_df.shape))
-            # print("Embeddings.....")
 
             logger.info('Merging price data and token data')
             merged_df = filtered_raw_price_df.merge(token_names_df, left_on=['base_currency'], right_on=['id'])
@@ -408,19 +423,19 @@ class CrossMapping:
             price_pivot = merged_df.pivot_table(index='timestamp_utc', columns='base_currency', values='open')
             price_pivot = price_pivot.fillna(method='ffill').fillna(method='bfill')
 
-            # # Standardize the pivoted data
-            # logger.info(f'Appling Scaling on price data')
-            # scaler = StandardScaler()
-            # price_scaled = scaler.fit_transform(price_pivot.T)
+            # Standardize the pivoted data
+            logger.info(f'Appling Scaling on price data')
+            scaler = StandardScaler()
+            price_scaled = scaler.fit_transform(price_pivot.T)
 
-            # # Step 4: DBSCAN clustering on time series data
-            # logger.info("Performing DBSCAN on time series data...")
-            # dbscan = DBSCAN(eps=10, min_samples=2, metric=smape_distance_metric)
-            # labels = dbscan.fit_predict(price_pivot.T.values)
+            # Step 4: DBSCAN clustering on time series data
+            logger.info("Performing DBSCAN on time series data...")
+            dbscan = DBSCAN(eps=10, min_samples=2, metric=smape_distance_metric)
+            labels = dbscan.fit_predict(price_pivot.T.values)
 
-            # # Store clustering results
-            # cluster_results = pd.DataFrame({'base_currency': price_pivot.columns, 'cluster': labels})
-            # cluster_results.to_csv('cluster_results_time_series.csv',index=False)
+            # Store clustering results
+            cluster_results = pd.DataFrame({'base_currency': price_pivot.columns, 'cluster': labels})
+            cluster_results.to_csv('cluster_results_time_series.csv',index=False)
 
             del raw_price_df
             del filtered_raw_price_df
@@ -447,7 +462,7 @@ class CrossMapping:
 
             # Calculate similar tokens using multiprocessing
             total_similar_tokens = self.CoinCrossMappingSimilarity_multiprocessing(
-                results_with_cluster_id, price_pivot_df, self.files_path, self.directory_names, max_workers=2
+                results_with_cluster_id, price_pivot_df, self.files_path, self.directory_names, max_workers=2,skip_noise_cluster=True
             )
             logger.info(f"Total similar tokens: {total_similar_tokens}")
 
