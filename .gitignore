@@ -1,3 +1,4 @@
+.env
 *.venv
 venv
 app/Datasets
@@ -9,3 +10,4 @@ CrossMapping-backup.ipynb
 validation_of_token.ipynb
 *.xml
 *.iml
+
