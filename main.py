@@ -35,7 +35,7 @@ class CrossMapping:
     def __init__(self):
         self.directory_names = {
             "dataset_dir_name": "Datasets",
-            "preprocessed_data_dir_name": "Datasets/ProcessedData",
+            "preprocessed_data_dir_name": os.path.join("Datasets","ProcessedData"),
             "visualization_data_dir_name": "VisualizationData",
             "testing_garbage_dir_name": "TestingGarbage",
             "ResultsDirectory": "SimilarityResults",
@@ -219,7 +219,7 @@ class CrossMapping:
                 }
 
                 # Save plot only if SMAPE is above 15
-                if smape < 10:
+                if smape < 5:
                     os.makedirs(token_folder_name, exist_ok=True)
                     plot_and_save(ts1=ts1_common,
                                   ts2=ts2_common,
