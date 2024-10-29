@@ -219,7 +219,7 @@ class CrossMapping:
                 }
 
                 # Save plot only if SMAPE is above 15
-                if smape < 5:
+                if smape < 5 :
                     os.makedirs(token_folder_name, exist_ok=True)
                     plot_and_save(ts1=ts1_common,
                                   ts2=ts2_common,
