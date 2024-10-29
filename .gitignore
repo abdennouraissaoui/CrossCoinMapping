@@ -16,3 +16,6 @@ ExperimentalFiles
 # Ignore Python cache files
 __pycache__/
 **/.ipynb_checkpoints/
+*.tar.gz
+*.log
+*.pdf

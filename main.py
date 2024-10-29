@@ -98,8 +98,12 @@ class CrossMapping:
 
         currency_count = price_data['base_currency'].value_counts()
         currency_index_less_then_threshold = currency_count[currency_count>price_points_threshold].index
-
         price_data_dataframe = price_data[ price_data['base_currency'].isin(currency_index_less_then_threshold) ]
+
+        same_min_max = price_data_dataframe.groupby('base_currency')['open'].agg(['min', 'max'])
+        same_min_max_equal = same_min_max[same_min_max['min'] == same_min_max['max']]
+
+        price_data_dataframe = price_data_dataframe[~price_data_dataframe['base_currency'].isin(same_min_max_equal.index)]
         return price_data_dataframe
     def filter_token_names(self,price_data=None,token_data=None):
 
@@ -308,6 +312,7 @@ class CrossMapping:
                 pass
         return df
 
+
     def __call__(self):
         testing_on_testing_ids = True
         TokenNameBaseClustring = False
@@ -317,12 +322,15 @@ class CrossMapping:
 
         logger.info('Filtering Price Data')
         filtered_raw_price_df = self.filter_price_data(price_data=raw_price_df, price_points_threshold=100)
-
+        logging.info(f"After Filtering Token id we have : {len(filtered_raw_price_df['base_currency'].unique().tolist())}")
         if testing_on_testing_ids:
 
             # testing_ids = list(filtered_raw_price_df['base_currency'].unique())[0:1000]
             testing_ids = [1166,15390,1146,15467,2012,15593,13049,16668,162796,168956]
-
+            random_ids = [75585,53476,18671,60768,21351,96390,61131, 46393, 21200, 20196, 21068,
+                             85420,21072,160593,61563,2036,1642,27115, 46393, 18182, 23333,18959,
+                          21315,19274,19448,20798,21752,20795,20127,21566,21583]
+            testing_ids = testing_ids + random_ids
             filtered_raw_price_df = filtered_raw_price_df[filtered_raw_price_df['base_currency'].isin(testing_ids)]
 
         logger.info('Reading Token Data')
@@ -449,6 +457,7 @@ class CrossMapping:
                 results_with_cluster_id, price_pivot_df, self.files_path, self.directory_names, max_workers=2,skip_noise_cluster=True
             )
             logger.info(f"Total similar tokens: {total_similar_tokens}")
+            gc.collect()
 
 
 
