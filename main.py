@@ -40,7 +40,7 @@ class CrossMapping:
         self.directory_names = {
             "dataset_dir_name": "Datasets",
             "preprocessed_data_dir_name": os.path.join("Datasets", "ProcessedData"),
-            "visualization_data_dir_name": "VisualizationData",
+            "visualization_data_dir_name": "ResultsVisualizationDataOfSameToken",
             "testing_garbage_dir_name": "TestingGarbage",
             "ResultsDirectory": "SimilarityResults",
             "cluster_dir_path": "ClusterResultsVisualization",
@@ -227,7 +227,9 @@ class CrossMapping:
                 }
 
                 # Save plot only if SMAPE is above 15
-                if smape < 5:
+                logger.info(f"Similarity Score: {similarity_score}")
+                if smape < smape_threshold:
+                    logger.info("Successfully found pair of tokens")
                     os.makedirs(token_folder_name, exist_ok=True)
                     plot_and_save(ts1=ts1_common,
                                   ts2=ts2_common,
@@ -259,7 +261,6 @@ class CrossMapping:
                                                    skip_noise_cluster=True,
                                                    smape_threshold=5):
         results_file = files_path['similarity_results_file_path']
-
         if not os.path.exists(results_file):
             with open(results_file, mode='w', newline='') as file:
                 writer = csv.writer(file)
@@ -338,17 +339,17 @@ class CrossMapping:
         return df
 
     def __call__(self):
-        testing_on_testing_ids = True
-        TokenNameBaseClustring = False
+        testing_on_testing_ids = False
+        TokenNameBaseClustring = True
 
         ClusterParameters = {
             "TokenBaseClustring": {
                 "eps": 0.5,
-                "min_samples": 3
+                "min_samples": 2
             },
             "PriceLevelClusterParameters": {
                 "eps": 5,
-                "min_samples": 3
+                "min_samples": 2
             },
             "SimilarityParameter": {
                 "smape_threshold": 5,
@@ -358,9 +359,9 @@ class CrossMapping:
 
         logger.info('Reading Price data')
         raw_price_df = self.read_price_data(self.files_path['raw_price_data'])
-
         logger.info('Filtering Price Data')
         filtered_raw_price_df = self.filter_price_data(price_data=raw_price_df, price_points_threshold=100)
+
         logging.info(
             f"After Filtering Token id we have : {len(filtered_raw_price_df['base_currency'].unique().tolist())}")
         if testing_on_testing_ids:
@@ -370,7 +371,12 @@ class CrossMapping:
                           85420, 21072, 160593, 61563, 2036, 1642, 27115, 46393, 18182, 23333, 18959,
                           21315, 19274, 19448, 20798, 21752, 20795, 20127, 21566, 21583]
             testing_ids = testing_ids + random_ids
+            logger.info(f"Number of Testing ids: {len(testing_ids)}")
             filtered_raw_price_df = filtered_raw_price_df[filtered_raw_price_df['base_currency'].isin(testing_ids)]
+
+        filtered_raw_price_df[filtered_raw_price_df['base_currency']==15467].to_csv('testing_sample.csv',index=False)
+        total_number_of_tokens = len(filtered_raw_price_df['base_currency'].unique())
+        logger.info(f"total number of tokens: {total_number_of_tokens}")
 
         logger.info('Reading Token Data')
         token_names_df = pd.read_csv(self.files_path['raw_token_names'])
