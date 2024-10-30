@@ -2,13 +2,14 @@ import numpy as np
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from dtw import accelerated_dtw
 from sklearn.feature_extraction.text import TfidfVectorizer
-import csv
 from sklearn.metrics.pairwise import cosine_similarity
-import os
-from tqdm import tqdm
 from .helper_visualization_functions import plot_and_save
+import os
+import csv
 import gc
+from tqdm import tqdm
 import glob
+
 def calculate_dtw_distance(ts1, ts2):
     ts1 = np.array(ts1).reshape(-1, 1)
     ts2 = np.array(ts2).reshape(-1, 1)
@@ -36,11 +37,6 @@ def calculate_cosine_similarity_char(str1, str2, ngram_range=(2, 3)):
     # print(f"difference between : {str1} and {str2} is : {cosine_sim[0][0]}")
     return cosine_sim[0][0]
 
-import os
-import csv
-import gc
-from tqdm import tqdm
-import glob
 
 def CoinCrossMappingSimilarity(results_with_cluster_id=None, price_pivot_df=None, files_path=None, directory_names=None):
     results_file = files_path['similarity_results_file_path']

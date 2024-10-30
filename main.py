@@ -354,7 +354,7 @@ class CrossMapping:
             "SimilarityParameter": {
                 "smape_threshold": 5,
             },
-            "max_worker": 2
+            "max_worker": 5
         }
 
         logger.info('Reading Price data')
@@ -450,7 +450,10 @@ class CrossMapping:
                 total_similar_tokens = self.CoinCrossMappingSimilarity_multiprocessing(
                     results_with_cluster_id, price_pivot_df, self.files_path, self.directory_names,
                     max_workers=ClusterParameters['max_worker'],
-                    skip_noise_cluster=True
+                    skip_noise_cluster=True,
+                    smape_threshold=ClusterParameters[
+                        'SimilarityParameter'][
+                        'smape_threshold']
                 )
                 logger.info(f"Total similar tokens: {total_similar_tokens}")
                 gc.collect()
