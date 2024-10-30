@@ -1,6 +1,6 @@
-from App.utils.helper_similarity_metrics import calculate_dtw_distance, calculate_error_metrics, \
-    calculate_cosine_similarity_char, CoinCrossMappingSimilarity, smape, smape_distance_metric
+from App.utils.helper_similarity_metrics import calculate_dtw_distance, calculate_error_metrics, smape_distance_metric
 from App.utils.helper_visualization_functions import plot_and_save, cluster_visualization_of_time_series
+from App.utils.helper_visualization_functions import generate_wordclouds_for_clusters
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import pairwise_distances
 from sklearn.preprocessing import StandardScaler
@@ -18,7 +18,6 @@ from tqdm import tqdm
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from App.utils.helper_visualization_functions import generate_wordclouds_for_clusters
 
 config = dotenv_values(os.path.join('.env'))
 import requests
@@ -48,7 +47,7 @@ class CrossMapping:
             "cluster_token_name_dir": "ClusterBaseOnTokenNameVisualization"
         }
         for key, value in self.directory_names.items():
-            print(f"Creating Directories : {value}")
+            logger.info(f"Creating Directories : {value}")
             os.makedirs(self.directory_names[key], exist_ok=True)
 
         self.files_path = {
@@ -164,7 +163,6 @@ class CrossMapping:
             for start in tqdm(range(0, total_tokens, batch_size), desc="Generating Embeddings"):
                 end = min(start + batch_size, total_tokens)
                 display_names = token_names_df['display_name'].iloc[start:end].tolist()
-
                 # Submit the task to the executor
                 futures.append(executor.submit(self.process_embedding_batch, display_names))
 
@@ -190,7 +188,7 @@ class CrossMapping:
         token_names_df.to_csv(save_path, index=False)
         logger.info("Embedding generation completed and saved.")
 
-    def process_pair(self, token1, token2, price_pivot_df, directory_names, results_file):
+    def process_pair(self, token1, token2, price_pivot_df, directory_names, results_file, smape_threshold):
         logger.info(f"Processing Token1 : {token1} & Token2 : {token2}")
         try:
             token_folder_name = os.path.join(directory_names['visualization_data_dir_name'])
@@ -258,7 +256,8 @@ class CrossMapping:
                                                    files_path=None,
                                                    directory_names=None,
                                                    max_workers=2,
-                                                   skip_noise_cluster=True):
+                                                   skip_noise_cluster=True,
+                                                   smape_threshold=5):
         results_file = files_path['similarity_results_file_path']
 
         if not os.path.exists(results_file):
@@ -284,8 +283,13 @@ class CrossMapping:
                     for j, token2 in enumerate(tokens):
                         if i < j:  # Skip redundant calculations
                             futures.append(
-                                executor.submit(self.process_pair, token1, token2, price_pivot_df, directory_names,
-                                                results_file))
+                                executor.submit(self.process_pair,
+                                                token1,
+                                                token2,
+                                                price_pivot_df,
+                                                directory_names,
+                                                results_file,
+                                                smape_threshold))
 
                 # Wait for all processes to complete
                 for future in tqdm(as_completed(futures), total=len(futures), desc="Processing Token Pairs"):
@@ -302,7 +306,10 @@ class CrossMapping:
                                  min_df=1,
                                  max_df=0.9,
                                  cluster_col_name='TokenNameBaseClusterLabel',
-                                 save_plots=False):
+                                 save_plots=False,
+                                 eps=0.5,
+                                 min_cluster_size=2
+                                 ):
 
         df.dropna(subset=['display_name'], inplace=True)  # Drop rows with NaN in 'display_name'
         df['display_name'] = df['display_name'].str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.lower()
@@ -313,7 +320,7 @@ class CrossMapping:
 
         cosine_distance_matrix = pairwise_distances(X, metric='cosine')
 
-        dbscan = DBSCAN(eps=0.5, min_samples=2, metric='precomputed')  # Adjust eps based on your data
+        dbscan = DBSCAN(eps=eps, min_samples=min_cluster_size, metric='precomputed')  # Adjust eps based on your data
         labels = dbscan.fit_predict(cosine_distance_matrix)
 
         # Assign cluster labels back to the DataFrame
@@ -324,7 +331,7 @@ class CrossMapping:
                                                  directory_names=self.directory_names,
                                                  cluster_label_name=f'{cluster_col_name}')
             except Exception as e:
-                logger.error(f"Error generating wordclouds for cluster {cluster_col_name}: {e}")
+                logger.error(f"Error generating word clouds for cluster {cluster_col_name}: {e}")
                 pass
         else:
             logger.info(f"Skipping cluster visualization: {cluster_col_name}")
@@ -333,6 +340,21 @@ class CrossMapping:
     def __call__(self):
         testing_on_testing_ids = True
         TokenNameBaseClustring = False
+
+        ClusterParameters = {
+            "TokenBaseClustring": {
+                "eps": 0.5,
+                "min_samples": 3
+            },
+            "PriceLevelClusterParameters": {
+                "eps": 5,
+                "min_samples": 3
+            },
+            "SimilarityParameter": {
+                "smape_threshold": 5,
+            },
+            "max_worker": 2
+        }
 
         logger.info('Reading Price data')
         raw_price_df = self.read_price_data(self.files_path['raw_price_data'])
@@ -357,11 +379,16 @@ class CrossMapping:
         token_names_df = self.filter_token_names(price_data=filtered_raw_price_df, token_data=token_names_df)
 
         if TokenNameBaseClustring == True:
-
-            logger.info('Token Name Base Clustring Started ...')
+            logger.info(f"Current Parameters : {ClusterParameters}")
+            logger.info('Token Name Base Clustering Started ...')
             token_names_df = self.ClustringBaseOnTokenName(df=token_names_df,
                                                            cluster_col_name='TokenNameBaseClusterLabel',
-                                                           save_plots=False)
+                                                           save_plots=False,
+                                                           eps=ClusterParameters['TokenBaseClustring']['eps'],
+                                                           min_cluster_size=ClusterParameters['TokenBaseClustring'][
+                                                               'min_samples']
+                                                           )
+
             total_cluster_base_on_token_name = len(list(token_names_df['TokenNameBaseClusterLabel'].unique()))
             logger.info(f"Total Number of cluster base on token name : {total_cluster_base_on_token_name}")
             for cluster_id, cluster_group in token_names_df.groupby('TokenNameBaseClusterLabel'):
@@ -381,13 +408,15 @@ class CrossMapping:
                 price_pivot = price_pivot.fillna(method='ffill').fillna(method='bfill')
 
                 # Standardize the pivoted data
-                logger.info(f'Appling Scaling on price data')
+                logger.info(f'Applying Scaling on price data')
                 scaler = StandardScaler()
                 price_scaled = scaler.fit_transform(price_pivot.T)
 
                 # Step 4: DBSCAN clustering on time series data
                 logger.info("Performing DBSCAN on time series data...")
-                dbscan = DBSCAN(eps=5, min_samples=2, metric=smape_distance_metric)
+                dbscan = DBSCAN(eps=ClusterParameters['PriceLevelClusterParameters']['eps'],
+                                min_samples=ClusterParameters['PriceLevelClusterParameters']['min_samples'],
+                                metric=smape_distance_metric)
                 labels = dbscan.fit_predict(price_pivot.T.values)
 
                 # Store clustering results
@@ -407,17 +436,21 @@ class CrossMapping:
                 #                                      cluster_dir_path=self.directory_names['cluster_dir_path'])
 
                 # Create pivot table from results with cluster IDs
-                price_pivot_df = results_with_cluster_id.pivot_table(index='timestamp_utc', columns='base_currency',
+                price_pivot_df = results_with_cluster_id.pivot_table(index='timestamp_utc',
+                                                                     columns='base_currency',
                                                                      values='open')
 
                 # Calculate similar tokens using multiprocessing
                 total_similar_tokens = self.CoinCrossMappingSimilarity_multiprocessing(
-                    results_with_cluster_id, price_pivot_df, self.files_path, self.directory_names, max_workers=2,skip_noise_cluster=True
+                    results_with_cluster_id, price_pivot_df, self.files_path, self.directory_names,
+                    max_workers=ClusterParameters['max_worker'],
+                    skip_noise_cluster=True
                 )
                 logger.info(f"Total similar tokens: {total_similar_tokens}")
                 gc.collect()
 
         else:
+            logger.info(f"Current Parameters : {ClusterParameters}")
 
             logger.info('Merging price data and token data')
             merged_df = filtered_raw_price_df.merge(token_names_df, left_on=['base_currency'], right_on=['id'])
@@ -440,7 +473,10 @@ class CrossMapping:
 
             # Step 4: DBSCAN clustering on time series data
             logger.info("Performing DBSCAN on time series data...")
-            dbscan = DBSCAN(eps=5, min_samples=3, metric=smape_distance_metric)
+            dbscan = DBSCAN(eps=ClusterParameters['PriceLevelClusterParameters']['eps'],
+                            min_samples=ClusterParameters['PriceLevelClusterParameters']['min_samples'],
+                            metric=smape_distance_metric)
+
             labels = dbscan.fit_predict(price_pivot.T.values)
 
             # Store clustering results
@@ -474,8 +510,12 @@ class CrossMapping:
                                                                                    price_pivot_df,
                                                                                    self.files_path,
                                                                                    self.directory_names,
-                                                                                   max_workers=2,
-                                                                                   skip_noise_cluster=True)
+                                                                                   max_workers=ClusterParameters[
+                                                                                       'max_worker'],
+                                                                                   skip_noise_cluster=True,
+                                                                                   smape_threshold=ClusterParameters[
+                                                                                       'SimilarityParameter'][
+                                                                                       'smape_threshold'])
             logger.info(f"Total similar tokens: {total_similar_tokens}")
             gc.collect()
 
