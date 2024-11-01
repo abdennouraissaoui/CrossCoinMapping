@@ -1,4 +1,4 @@
-from App.utils.helper_similarity_metrics import calculate_dtw_distance , calculate_error_metrics ,calculate_cosine_similarity_char ,CoinCrossMappingSimilarity ,smape,smape_distance_metric
+from App.utils.helper_similarity_metrics import calculate_dtw_distance, calculate_error_metrics ,smape,smape_distance_metric
 from App.utils.helper_visualization_functions import plot_and_save , cluster_visualization_of_time_series
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics import pairwise_distances
@@ -218,8 +218,8 @@ class CrossMapping:
                     # "cosine_sim": cosine_sim
                 }
 
-                # Save plot only if SMAPE is above 15
-                if smape < 10:
+                # Save plot only if SMAPE is less than 0.5
+                if smape < 0.5:
                     os.makedirs(token_folder_name, exist_ok=True)
                     plot_and_save(ts1=ts1_common,
                                   ts2=ts2_common,
@@ -281,41 +281,11 @@ class CrossMapping:
         total_detected_similar_tokens = len(glob.glob(f"{directory_names['visualization_data_dir_name']}/*.png"))
         return total_detected_similar_tokens
 
-    def ClustringBaseOnTokenName(self,df =None,
-                                 max_features=1000,
-                                 min_df=1,
-                                 max_df=0.9,
-                                 cluster_col_name='TokenNameBaseClusterLabel',
-                                 save_plots=False):
-
-        df.dropna(subset=['display_name'], inplace=True)  # Drop rows with NaN in 'display_name'
-        df['display_name'] = df['display_name'].str.replace(r'[^a-zA-Z0-9]', '', regex=True).str.lower()
-
-        vectorizer = TfidfVectorizer(max_features=max_features, min_df=min_df, max_df=max_df)
-
-        X = vectorizer.fit_transform(df['display_name'])
-
-        cosine_distance_matrix = pairwise_distances(X, metric='cosine')
-
-        dbscan = DBSCAN(eps=0.5, min_samples=2, metric='precomputed')  # Adjust eps based on your data
-        labels = dbscan.fit_predict(cosine_distance_matrix)
-
-        # Assign cluster labels back to the DataFrame
-        df[f'{cluster_col_name}'] = labels
-        if save_plots==True:
-
-            try:
-
-                generate_wordclouds_for_clusters(token_names_df=df, directory_names=self.directory_names,
-                                         cluster_label_name=f'{cluster_col_name}')
-            except:
-                pass
-        return df
-
 
     def __call__(self):
-        testing_on_testing_ids = True
-        TokenNameBaseClustring = False
+        testing_on_testing_ids = False
+        max_workers = 6
+        dbscan_results_path = 'dbscan_results.pkl'  # New path for saving DBSCAN model
 
         logger.info('Reading Price data')
         raw_price_df = self.read_price_data(self.files_path['raw_price_data'])
@@ -338,126 +308,71 @@ class CrossMapping:
 
         logger.info('Filtering Token Data')
         token_names_df = self.filter_token_names(price_data=filtered_raw_price_df, token_data=token_names_df)
+        
+        logger.info('Merging price data and token data')
+        merged_df = filtered_raw_price_df.merge(token_names_df, left_on=['base_currency'], right_on=['id'])
 
+        # sample_for_testing
+        logger.info('Separating Testing currency id')
+        # testing_base_currency_id = list(merged_df['base_currency'].unique())[0:50]
+        # testing_base_currency_id = [1166,15390,1146,15467,2012,15593,13049,16668,162796,168956]
 
-        if TokenNameBaseClustring == True:
+        # merged_df =  merged_df [merged_df['base_currency'].isin(testing_base_currency_id)]
 
-            logger.info('Token Name Base Clustring Started ...')
-            token_names_df = self.ClustringBaseOnTokenName(df=token_names_df,cluster_col_name='TokenNameBaseClusterLabel',save_plots=False)
-            total_cluster_base_on_token_name = len(list(token_names_df['TokenNameBaseClusterLabel'].unique()))
-            logger.info(f"Total Number of cluster base on token name : {total_cluster_base_on_token_name}") 
-            for cluster_id, cluster_group in token_names_df.groupby('TokenNameBaseClusterLabel'):
-                if cluster_id==-1:
-                    continue
-                logger.info(f"Processing Cluster ID of TokenNameBase: {cluster_id}")
-                # print(list(cluster_group))
-                tokens = list(cluster_group['id'].unique())
-                # logger.info(f'Tokens in this cluster : {tokens}')
-                logger.info(f"Number of tokens in this cluster: {len(tokens)}")
+        logger.info(f'Pivoting the data')
+        price_pivot = merged_df.pivot_table(index='timestamp_utc', columns='base_currency', values='open')
+        price_pivot = price_pivot.fillna(method='ffill').fillna(method='bfill')
 
-                logger.info('Merging Token Name Data to price data after Clustering')
-                merged_df = filtered_raw_price_df.merge(cluster_group, left_on=['base_currency'], right_on=['id'])
+        # Standardize the pivoted data
+        logger.info(f'Appling Scaling on price data')
+        scaler = StandardScaler()
+        price_scaled = scaler.fit_transform(price_pivot.T)
 
-                logger.info(f'Pivoting the data')
-                price_pivot = merged_df.pivot_table(index='timestamp_utc', columns='base_currency', values='open')
-                price_pivot = price_pivot.fillna(method='ffill').fillna(method='bfill')
-
-                # Standardize the pivoted data
-                logger.info(f'Appling Scaling on price data')
-                scaler = StandardScaler()
-                price_scaled = scaler.fit_transform(price_pivot.T)
-
-                # Step 4: DBSCAN clustering on time series data
-                logger.info("Performing DBSCAN on time series data...")
-                dbscan = DBSCAN(eps=10, min_samples=2, metric=smape_distance_metric)
-                labels = dbscan.fit_predict(price_pivot.T.values)
-
-                # Store clustering results
-                cluster_results = pd.DataFrame({'base_currency': price_pivot.columns, 'cluster': labels})
-                # cluster_results.to_csv('cluster_results_time_series.csv',index=False)
-
-                # cluster_results = pd.read_csv('cluster_results_time_series.csv')
-                logger.info(f"Created DataFrame for cluster results. Shape: {cluster_results.shape}")
-
-                # Merge results with the original filtered DataFrame
-                results_with_cluster_id = pd.merge(merged_df, cluster_results, on='base_currency')
-                results_with_cluster_id['timestamp_utc'] = pd.to_datetime(results_with_cluster_id['timestamp_utc'])
-                results_with_cluster_id = results_with_cluster_id.sort_values(by='timestamp_utc')
-
-                # Visualization (if needed)
-                # cluster_visualization_of_time_series(results_with_cluster_id=results_with_cluster_id,
-                #                                      cluster_dir_path=self.directory_names['cluster_dir_path'])
-
-                # Create pivot table from results with cluster IDs
-                price_pivot_df = results_with_cluster_id.pivot_table(index='timestamp_utc', columns='base_currency',
-                                                                     values='open')
-
-                # Calculate similar tokens using multiprocessing
-                total_similar_tokens = self.CoinCrossMappingSimilarity_multiprocessing(
-                    results_with_cluster_id, price_pivot_df, self.files_path, self.directory_names, max_workers=2
-                )
-                logger.info(f"Total similar tokens: {total_similar_tokens}")
-                gc.collect()
-
+        # Step 4: DBSCAN clustering on time series data
+        logger.info("Checking for existing DBSCAN results...")
+        if os.path.exists(dbscan_results_path):
+            logger.info("Loading existing DBSCAN results...")
+            labels = pd.read_pickle(dbscan_results_path)
         else:
-
-            logger.info('Merging price data and token data')
-            merged_df = filtered_raw_price_df.merge(token_names_df, left_on=['base_currency'], right_on=['id'])
-
-            # sample_for_testing
-            logger.info('Separating Testing currency id')
-            # testing_base_currency_id = list(merged_df['base_currency'].unique())[0:50]
-            # testing_base_currency_id = [1166,15390,1146,15467,2012,15593,13049,16668,162796,168956]
-
-            # merged_df =  merged_df [merged_df['base_currency'].isin(testing_base_currency_id)]
-
-            logger.info(f'Pivoting the data')
-            price_pivot = merged_df.pivot_table(index='timestamp_utc', columns='base_currency', values='open')
-            price_pivot = price_pivot.fillna(method='ffill').fillna(method='bfill')
-
-            # Standardize the pivoted data
-            logger.info(f'Appling Scaling on price data')
-            scaler = StandardScaler()
-            price_scaled = scaler.fit_transform(price_pivot.T)
-
-            # Step 4: DBSCAN clustering on time series data
-            logger.info("Performing DBSCAN on time series data...")
-            dbscan = DBSCAN(eps=10, min_samples=2, metric=smape_distance_metric)
+            logger.info("Performing new DBSCAN on time series data...")
+            dbscan = DBSCAN(eps=0.1, min_samples=2, metric=smape_distance_metric, n_jobs=max_workers)
             labels = dbscan.fit_predict(price_pivot.T.values)
+            # Save the results
+            pd.to_pickle(labels, dbscan_results_path)
 
-            # Store clustering results
-            cluster_results = pd.DataFrame({'base_currency': price_pivot.columns, 'cluster': labels})
-            cluster_results.to_csv('cluster_results_time_series.csv',index=False)
+        # Store clustering results
+        cluster_results = pd.DataFrame({'base_currency': price_pivot.columns, 'cluster': labels})
+        cluster_results.to_csv('cluster_results_time_series.csv', index=False)
 
-            del raw_price_df
-            del filtered_raw_price_df
-            del token_names_df
-            del price_pivot
-            gc.collect()
+        del raw_price_df
+        del filtered_raw_price_df
+        del token_names_df
+        del price_pivot
+        gc.collect()
 
 
-            cluster_results =  pd.read_csv('cluster_results_time_series.csv')
-            logger.info(f"Created DataFrame for cluster results. Shape: {cluster_results.shape}")
+        cluster_results =  pd.read_csv('cluster_results_time_series.csv')
+        logger.info(f"Created DataFrame for cluster results. Shape: {cluster_results.shape}")
 
-            # Merge results with the original filtered DataFrame
-            results_with_cluster_id = pd.merge(merged_df, cluster_results, on='base_currency')
-            results_with_cluster_id['timestamp_utc'] = pd.to_datetime(results_with_cluster_id['timestamp_utc'])
-            results_with_cluster_id = results_with_cluster_id.sort_values(by='timestamp_utc')
+        # Merge results with the original filtered DataFrame
+        results_with_cluster_id = pd.merge(merged_df, cluster_results, on='base_currency')
+        results_with_cluster_id['timestamp_utc'] = pd.to_datetime(results_with_cluster_id['timestamp_utc'])
+        results_with_cluster_id = results_with_cluster_id.sort_values(by='timestamp_utc')
 
-            # Visualization (if needed)
-            cluster_visualization_of_time_series(results_with_cluster_id=results_with_cluster_id,
-                                                 cluster_dir_path=self.directory_names['cluster_dir_path'])
+        # Visualization (if needed)
+        cluster_visualization_of_time_series(results_with_cluster_id=results_with_cluster_id,
+                                                cluster_dir_path=self.directory_names['cluster_dir_path'])
 
-            # Create pivot table from results with cluster IDs
-            price_pivot_df = results_with_cluster_id.pivot_table(index='timestamp_utc', columns='base_currency',
-                                                                 values='open')
+        # Create pivot table from results with cluster IDs
+        price_pivot_df = results_with_cluster_id.pivot_table(index='timestamp_utc', columns='base_currency',
+                                                                values='open')
 
-            # Calculate similar tokens using multiprocessing
-            total_similar_tokens = self.CoinCrossMappingSimilarity_multiprocessing(
-                results_with_cluster_id, price_pivot_df, self.files_path, self.directory_names, max_workers=2,skip_noise_cluster=True
-            )
-            logger.info(f"Total similar tokens: {total_similar_tokens}")
-            gc.collect()
+        # Calculate similar tokens using multiprocessing
+        total_similar_tokens = self.CoinCrossMappingSimilarity_multiprocessing(
+            results_with_cluster_id, price_pivot_df, self.files_path, self.directory_names, max_workers=max_workers,skip_noise_cluster=True
+        )
+        logger.info(f"Total similar tokens: {total_similar_tokens}")
+        gc.collect()
 
 
 
